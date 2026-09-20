@@ -1,0 +1,49 @@
+{
+  "name": "deep-drill-backend",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "start:dev": "node --watch --require ts-node/register src/main.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start:prod": "node dist/main.js",
+    "test": "tsc -p tsconfig.test.json && node --test .test-build/test/unit/*.test.js",
+    "test:e2e": "tsc -p tsconfig.test.json && node --test .test-build/test/e2e/*.test.js",
+    "lint": "eslint src test",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"*.json\""
+  },
+  "dependencies": {
+    "@nestjs/common": "12.0.3",
+    "@nestjs/config": "12.0.0",
+    "@nestjs/core": "12.0.3",
+    "@nestjs/jwt": "12.0.2",
+    "@nestjs/mongoose": "12.0.0",
+    "@nestjs/platform-express": "12.0.3",
+    "@nestjs/swagger": "12.0.1",
+    "@nestjs/throttler": "6.7.0",
+    "argon2": "0.45.1",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.15.1",
+    "google-auth-library": "11.1.0",
+    "helmet": "8.3.0",
+    "mongoose": "9.10.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@nestjs/testing": "12.0.3",
+    "@types/express": "5.0.6",
+    "@types/node": "24.13.6",
+    "@types/supertest": "7.2.1",
+    "eslint": "10.11.0",
+    "prettier": "3.9.8",
+    "supertest": "7.2.2",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.70.0"
+  }
+}

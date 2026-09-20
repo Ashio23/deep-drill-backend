@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.test-build/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+.idea/
+.vscode/
+.DS_Store
+*.pem
+*.key
