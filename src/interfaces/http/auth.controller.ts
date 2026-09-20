@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   HttpCode,
+  Logger,
   Post,
   Req,
   UseGuards,
@@ -33,6 +34,7 @@ import {
 @ApiResponse({ status: 503, type: ErrorDto })
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
   constructor(
     private readonly signIn: SignInUseCase,
     private readonly register: RegisterUseCase,
@@ -41,8 +43,13 @@ export class AuthController {
   @Post('sign-in')
   @HttpCode(200)
   @ApiOkResponse({ type: AuthResponseDto })
-  social(@Body() input: SocialSignInDto) {
-    return this.signIn.social(input.provider, input.credential);
+  async social(@Body() input: SocialSignInDto) {
+    const response = await this.signIn.social(input.provider, input.credential);
+    if (input.provider === 'google')
+      this.logger.log(
+        `Google authentication successful userId=${response.user.id}`,
+      );
+    return response;
   }
   @Post('sign-in/password')
   @HttpCode(200)

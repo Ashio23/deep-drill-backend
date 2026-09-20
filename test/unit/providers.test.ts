@@ -100,6 +100,7 @@ function googleToken(overrides: Record<string, unknown> = {}) {
       email: 'pilot@example.test',
       email_verified: true,
       name: 'Google Pilot',
+      picture: 'https://example.test/avatar.png',
       ...overrides,
     }),
   ).toString('base64url');
@@ -124,6 +125,9 @@ test('Google verifies a signed identity using the official verifier', async (t) 
   ).validateCredential(googleToken());
   assert.equal(identity.providerUserId, 'verified-google-id');
   assert.equal(identity.emailVerified, true);
+  assert.equal(identity.email, 'pilot@example.test');
+  assert.equal(identity.displayName, 'Google Pilot');
+  assert.equal(identity.avatarUrl, 'https://example.test/avatar.png');
 });
 for (const [label, claims] of Object.entries({
   audience: { aud: 'other.apps.googleusercontent.com' },
@@ -163,5 +167,28 @@ test('Google rejects an altered signature', async (t) => {
       pieces.join('.'),
     ),
     { code: 'AUTH_INVALID_CREDENTIAL' },
+  );
+});
+
+test('Google adapter never exposes verification errors containing credentials', async (t) => {
+  t.mock.method(OAuth2Client.prototype, 'verifyIdToken', async () => {
+    throw new Error(
+      'Wrong recipient, payload audience != requiredAudience; private-credential-marker',
+    );
+  });
+  await assert.rejects(
+    new GoogleIdentityProvider(googleConfig).validateCredential(
+      'private-credential-marker',
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(
+        (error as { code?: string }).code,
+        'AUTH_INVALID_CREDENTIAL',
+      );
+      assert.ok(!error.message.includes('private-credential-marker'));
+      assert.ok(!error.message.includes('audience'));
+      return true;
+    },
   );
 });

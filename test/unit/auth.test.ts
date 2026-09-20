@@ -266,3 +266,53 @@ test('configuration fails early for missing secrets and enabled unconfigured pro
   );
   assert.equal(validateEnvironment(base).MAX_SESSIONS, 10);
 });
+
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
+import { AuthController } from '../../src/interfaces/http/auth.controller';
+import { HealthController } from '../../src/interfaces/http/health.controller';
+import { Connection } from 'mongoose';
+test('Google success log contains only the game user ID after the session is created', async (t) => {
+  const f = fixture();
+  const logs: string[] = [];
+  t.mock.method(Logger.prototype, 'log', (message: string) => {
+    logs.push(message);
+  });
+  const controller = new AuthController(
+    f.signIn,
+    new RegisterUseCase(f.users, passwords, f.sessions),
+    new SignOutUseCase(f.users),
+  );
+  const result = await controller.social({
+    provider: Provider.Google,
+    credential: 'unit-provider-credential',
+  });
+  assert.deepEqual(logs, [
+    `Google authentication successful userId=${result.user.id}`,
+  ]);
+  await assert.rejects(
+    controller.social({ provider: Provider.Google, credential: 'bad' }),
+  );
+  assert.equal(logs.length, 1);
+});
+test('health checks Mongo ping and sanitizes database failures', async () => {
+  let fail = false;
+  const mongo = {
+    readyState: 1,
+    db: {
+      command: async () => {
+        if (fail) throw new Error('private database detail');
+        return { ok: 1 };
+      },
+    },
+  };
+  const controller = new HealthController(mongo as unknown as Connection);
+  assert.deepEqual(await controller.health(), { status: 'ok', database: 'up' });
+  fail = true;
+  await assert.rejects(controller.health(), (error: unknown) => {
+    assert.ok(error instanceof ServiceUnavailableException);
+    assert.ok(!error.message.includes('private database detail'));
+    return true;
+  });
+  mongo.readyState = 0;
+  await assert.rejects(controller.health(), ServiceUnavailableException);
+});

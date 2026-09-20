@@ -85,6 +85,17 @@ before(
       .useValue({
         validateCredential: async (c: string) => {
           if (c === 'invalid') throw new AuthError('AUTH_INVALID_CREDENTIAL');
+          if (c.startsWith('profile:')) {
+            const version = c.slice('profile:'.length);
+            return {
+              provider: Provider.Google,
+              providerUserId: 'stable-google-sub',
+              email: `${version}@example.test`,
+              emailVerified: true,
+              displayName: `Pilot ${version}`,
+              avatarUrl: `https://example.test/${version}.png`,
+            };
+          }
           return {
             provider: Provider.Google,
             providerUserId: c,
@@ -120,7 +131,7 @@ after(async () => {
 const api = () => request(app.getHttpServer());
 test('health, security headers and OpenAPI available', async () => {
   const r = await api().get('/api/v1/health').expect(200);
-  assert.equal(r.body.status, 'ok');
+  assert.deepEqual(r.body, { status: 'ok', database: 'up' });
   assert.ok(r.headers['x-content-type-options']);
   await api().get('/api/docs-json').expect(200);
 });
@@ -296,4 +307,32 @@ test('concurrent local registration creates only one account', async () => {
       .countDocuments({ username: 'concurrent_local' }),
     1,
   );
+});
+
+test('Google email/profile changes keep sub identity and add a distinct session', async () => {
+  const first = await api()
+    .post('/api/v1/auth/sign-in')
+    .send({ provider: 'google', credential: 'profile:before' })
+    .expect(200);
+  const second = await api()
+    .post('/api/v1/auth/sign-in')
+    .send({ provider: 'google', credential: 'profile:after' })
+    .expect(200);
+  assert.equal(first.body.user.id, second.body.user.id);
+  assert.equal(second.body.user.email, 'after@example.test');
+  assert.equal(second.body.user.displayName, 'Pilot after');
+  assert.equal(second.body.user.avatarUrl, 'https://example.test/after.png');
+  const users = connection.collection('users');
+  assert.equal(
+    await users.countDocuments({
+      providers: {
+        $elemMatch: { type: 'google', providerUserId: 'stable-google-sub' },
+      },
+    }),
+    1,
+  );
+  const record = await users.findOne({ _id: first.body.user.id });
+  assert.equal(record!.sessions.length, 2);
+  assert.notEqual(record!.sessions[0].id, record!.sessions[1].id);
+  assert.ok(record!.lastLoginAt instanceof Date);
 });

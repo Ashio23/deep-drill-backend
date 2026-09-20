@@ -7,9 +7,15 @@ import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 export class HealthController {
   constructor(@InjectConnection() private readonly mongo: Connection) {}
   @Get()
-  @ApiOkResponse({ schema: { example: { status: 'ok', mongo: 'up' } } })
-  health() {
-    if (this.mongo.readyState !== 1) throw new ServiceUnavailableException();
-    return { status: 'ok', mongo: 'up' };
+  @ApiOkResponse({ schema: { example: { status: 'ok', database: 'up' } } })
+  async health() {
+    try {
+      if (this.mongo.readyState !== 1 || !this.mongo.db)
+        throw new Error('Database unavailable');
+      await this.mongo.db.command({ ping: 1 }, { timeoutMS: 2000 });
+    } catch {
+      throw new ServiceUnavailableException();
+    }
+    return { status: 'ok', database: 'up' };
   }
 }

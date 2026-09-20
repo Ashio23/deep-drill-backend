@@ -7,14 +7,15 @@ Standalone modular NestJS authentication service. Client: `../Android`; backend:
 ```sh
 nvm use
 npm ci
-cp .env.example .env
+test -f .env || cp .env.example .env
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
-# Put the generated value in JWT_SECRET in .env. Do not commit it.
+# On a new setup, put the generated value in JWT_SECRET; preserve an existing secret.
+# Set MONGODB_URI to your Mongo URI ending in /deep-drill (or mongodb://127.0.0.1:27017/deep-drill).
 docker compose up -d
 npm run start:dev
 ```
 
-Mongo is exposed on host loopback only; Compose is for development, without authentication. Do not expose this Mongo service publicly. You can instead run an installed MongoDB 8 instance and configure MONGODB_URI. Android emulator connects to `http://10.0.2.2:3000`; API paths already include `/api/v1`.
+Mongo is exposed on host loopback only; Compose is for development, without authentication. Do not expose this Mongo service publicly. You can instead run an installed MongoDB 8 instance and configure MONGODB_URI. Android emulator connects to `http://10.0.2.2:3000/api/v1`; this is the complete API root.
 
 ```sh
 npm run lint
@@ -58,7 +59,7 @@ All successful authentication responses use HTTP 200:
 | POST `/api/v1/auth/sign-in/password` | `{ "username": "pilot_one", "password": "<passphrase>" }` | Session above |
 | POST `/api/v1/auth/sign-up` | `{ "username": "pilot_one", "password": "<passphrase>", "displayName": "Pilot One", "gender": "unspecified" }` | Account + session above |
 | POST `/api/v1/auth/sign-out` | Empty body, `Authorization: Bearer <Deep Drill JWT>` | `{ "success": true }` |
-| GET `/api/v1/health` | None | `{ "status": "ok", "mongo": "up" }` |
+| GET `/api/v1/health` | None | `{ "status": "ok", "database": "up" }` |
 
 Username/password support is the user's additional requirement and supersedes the original social-only scope. Usernames are ASCII letters/digits/underscore, 3–24 characters, case-insensitive. Passwords are 12–128 characters, never trimmed and never returned. Display name is 1–40 characters, trimmed, no control characters. Gender is optional: `female`, `male`, `non_binary`, `unspecified`; defaults to unspecified. It is a self-described pilot profile attribute, not verified biological data; it does not affect combat, balance or authentication. No birth date, address, telephone or real legal name is requested. Social providers do not supply this field.
 
@@ -106,8 +107,8 @@ Enabled providers must have complete configuration or startup fails. Disabled pr
 
 1. Create/select a Google Cloud project; configure Google Auth Platform branding/audience and development test users.
 2. Create Android OAuth clients for the exact application ID and signing SHA-1: debug `com.deepdrill.game.debug`, release `com.deepdrill.game`. Include Play App Signing certificate for store builds. Obtain your actual fingerprints with the client's `./gradlew :android:signingReport`; do not copy example fingerprints.
-3. Create a **Web application OAuth client** in that project. Its client ID is the audience used by both backend GOOGLE_CLIENT_ID and Android GOOGLE_SERVER_CLIENT_ID. Android OAuth client IDs are not this audience. No web client secret belongs in Android; no google-services.json/Firebase is required for this flow.
-4. Set AUTH_GOOGLE_ENABLED=true after setting GOOGLE_CLIENT_ID. Put GOOGLE_SERVER_CLIENT_ID in client local `auth.properties` (ignored) or Gradle user properties.
+3. Create a **Web application OAuth client** in that project. Its client ID is the audience used by both backend GOOGLE_CLIENT_ID and Android GOOGLE_WEB_CLIENT_ID. Android OAuth client IDs are not this audience. No web client secret belongs in Android; no google-services.json/Firebase is required for this flow.
+4. Set AUTH_GOOGLE_ENABLED=true after setting GOOGLE_CLIENT_ID. Put GOOGLE_WEB_CLIENT_ID in client local `auth.properties` (ignored) or Gradle user properties.
 5. Android uses Credential Manager's explicit GetSignInWithGoogleOption, extracts the Google ID token and sends it over HTTPS. Backend google-auth-library verifyIdToken checks signature, issuer, expiration and audience and uses validated `sub` as identity. No password from Google ever reaches this API.
 
 Official references checked for this implementation: [Android implementation](https://developer.android.com/identity/sign-in/credential-manager-siwg-implementation), [server verification](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token), [Keystore](https://developer.android.com/privacy-and-security/keystore).
@@ -140,3 +141,21 @@ For each configured social provider: install Android debug, login, verify one us
 Real Google/Facebook end-to-end testing requires the app owner's Console configuration and development credentials. Automated tests replace providers and are not proof of a real OAuth round trip. No fake adapter is wired in this server. No deployment, password recovery/change, account deletion API, email verification, account linking, refresh tokens or cloud profile editing in this increment. Configure policy/deletion obligations before public social release. Current game progress remains device-local and shared by accounts on that installation; signing out neither deletes nor uploads it. Purchases, premium currency and cloud progression must become server-authoritative before sensitive online operations are added.
 
 Future collections may include purchases, player-progress, transactions, entitlements, events; none are created. Complete payment history must have its own collection rather than embedding into users. Next features only: refresh/session strategy if needed, cloud progression, purchase validation, entitlements, player profile.
+
+## Real Google login setup and validation
+
+See [GOOGLE_AUTH_SETUP.md](GOOGLE_AUTH_SETUP.md). Current local status: **real Google end-to-end flow verified on Android API 35 emulator**. The correct Web OAuth Client ID is configured locally in both projects; the owner's replacement Android OAuth client works with the debug package and signing certificate. Real login, a unique Google user in Atlas, encrypted local session, restart persistence, logout/revocation and a second login using the same user with a distinct session were verified. Normal automated tests still mock Google.
+
+```dotenv
+# In ignored .env, only after obtaining the real Web application OAuth Client ID:
+GOOGLE_CLIENT_ID=<WEB_OAUTH_CLIENT_ID>
+AUTH_GOOGLE_ENABLED=true
+```
+
+The value must exactly match Android `GOOGLE_WEB_CLIENT_ID` / Credential Manager `serverClientId`. Never use the Android OAuth Client ID as audience. Preserve the existing Atlas connection and JWT secret. Restart after editing `.env`.
+
+`npm run start:dev` binds to `0.0.0.0:3000`. A successful database ping logs `Mongo connected` without URI. `GET /api/v1/health` pings Mongo with a bounded timeout and returns `{"status":"ok","database":"up"}` or a sanitized 503. Completed Google sign-in logs only `Google authentication successful userId=<game UUID>`, never identity tokens, JWTs, credentials or email.
+
+After a real Android login, copy only the game User ID from debug diagnostics and run `node scripts/verify-google-user.cjs <USER_ID>`. This read-only command checks `deep-drill.users`, Google identity presence and exactly one matching user; it prints only game/session UUIDs, timestamps and revocation state. Run before logout, after logout, and after another login: same user UUID, revoked old session, distinct new session. Do not feed tokens to scripts or store them as fixtures. Android session persistence, logout and duplicate checks after real Google authentication passed in the emulator on 2026-09-20.
+
+The earlier error 28444 was resolved: an Android OAuth Client ID had been supplied as the Web audience. Replacing it with the actual Web Client ID enabled the complete real flow.
