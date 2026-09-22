@@ -40,7 +40,7 @@ before(
         String(port),
         '--bind_ip',
         '127.0.0.1',
-        '--nounixsocket',
+        ...(process.platform === 'win32' ? [] : ['--nounixsocket']),
       ],
       { stdio: ['ignore', 'pipe', 'pipe'] },
     );
