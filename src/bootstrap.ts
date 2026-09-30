@@ -1,10 +1,10 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { json } from 'express';
 import { AuthError } from './domain/auth';
 import { ApiErrorFilter } from './interfaces/http/error.filter';
+import { configureSwagger } from './interfaces/http/swagger';
 export function configureApp(app: INestApplication): void {
   const config = app.get(ConfigService);
   app.use(helmet());
@@ -31,15 +31,6 @@ export function configureApp(app: INestApplication): void {
   );
   app.useGlobalFilters(new ApiErrorFilter());
   if (config.get<boolean>('SWAGGER_ENABLED')) {
-    const options = new DocumentBuilder()
-      .setTitle('Deep Drill API')
-      .setVersion('1')
-      .addBearerAuth()
-      .build();
-    SwaggerModule.setup(
-      'api/docs',
-      app,
-      SwaggerModule.createDocument(app, options),
-    );
+    configureSwagger(app);
   }
 }

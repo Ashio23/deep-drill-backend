@@ -67,6 +67,39 @@ Unknown request fields are rejected. No email existence endpoint. Wrong local pa
 
 Errors: `{ "statusCode": 401, "code": "AUTH_INVALID_CREDENTIAL", "message": "..." }`. Codes: AUTH_INVALID_PROVIDER (400), REQUEST_INVALID (400), AUTH_INVALID_CREDENTIAL (401), AUTH_EXPIRED_CREDENTIAL (401), AUTH_INVALID_SESSION (401), AUTH_SESSION_REVOKED (401), AUTH_REGISTRATION_FAILED (409), RATE_LIMITED (429), AUTH_PROVIDER_UNAVAILABLE (503), USER_PERSISTENCE_FAILURE (503). No raw provider response or request content is logged. Swagger documents schemas at `/api/docs` only when SWAGGER_ENABLED=true.
 
+## Swagger / OpenAPI
+
+Set `SWAGGER_ENABLED=true` in `.env` and restart the backend (`npm run start:dev`).
+With the default port 3000:
+
+- Swagger UI: <http://localhost:3000/api/docs>
+- OpenAPI JSON: <http://localhost:3000/api/docs-json>
+- OpenAPI YAML: <http://localhost:3000/api/docs-yaml>
+
+The UI groups authentication and health endpoints, with request examples,
+validation constraints and response schemas. The specification includes the
+`/api/v1` prefix, so **Try it out** uses the same API as the Android client.
+
+To test an authenticated request:
+
+1. Execute `POST /api/v1/auth/sign-up` with your own test username/password, or
+   use an existing account with `POST /api/v1/auth/sign-in/password`.
+2. Copy `accessToken` from the response. Click **Authorize** and paste the token
+   without the `Bearer` prefix.
+3. Execute `POST /api/v1/auth/sign-out` without a body. It revokes the current
+   session; a second call using the same token returns 401.
+
+Social sign-in requires an enabled provider and a real Google ID token or
+Facebook access token. The examples contain placeholders, not working credentials.
+**Try it out** performs real operations against the running backend, including
+creating users and revoking sessions. Authorization is not persisted across page
+reloads, and the UI does not send the schema to an external validator.
+
+Set `SWAGGER_ENABLED=false` (or omit it) to disable the UI and both schema routes.
+The normal API endpoints remain available. See the
+[NestJS Swagger documentation](https://docs.nestjs.com/openapi/introduction)
+for the underlying integration.
+
 ## Mongo / concurrency
 
 Only `users` is created. Each document holds a UUID `_id`, `identityKeys[]`, `providers[]` (type, providerUserId, nullable email, verification flag, linkedAt), username, displayName, gender, nullable email/avatarUrl, optional Argon2id passwordHash, timestamps, lastLoginAt and bounded `sessions[]`.

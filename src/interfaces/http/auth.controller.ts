@@ -10,6 +10,7 @@ import {
 import {
   ApiBearerAuth,
   ApiOkResponse,
+  ApiOperation,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -28,10 +29,26 @@ import {
   SuccessDto,
 } from './auth.dto';
 @ApiTags('Authentication')
-@ApiResponse({ status: 400, type: ErrorDto })
-@ApiResponse({ status: 401, type: ErrorDto })
-@ApiResponse({ status: 429, type: ErrorDto })
-@ApiResponse({ status: 503, type: ErrorDto })
+@ApiResponse({
+  status: 400,
+  description: 'Invalid fields or unsupported provider.',
+  type: ErrorDto,
+})
+@ApiResponse({
+  status: 401,
+  description: 'Invalid or expired credentials; invalid or revoked session.',
+  type: ErrorDto,
+})
+@ApiResponse({
+  status: 429,
+  description: 'Per-IP request limit exceeded.',
+  type: ErrorDto,
+})
+@ApiResponse({
+  status: 503,
+  description: 'Provider disabled or account storage temporarily unavailable.',
+  type: ErrorDto,
+})
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
@@ -42,6 +59,11 @@ export class AuthController {
   ) {}
   @Post('sign-in')
   @HttpCode(200)
+  @ApiOperation({
+    summary: 'Sign in with Google or Facebook',
+    description:
+      'Validates the provider credential and creates a Deep Drill session. A first sign-in creates the user. Emails do not automatically link accounts.',
+  })
   @ApiOkResponse({ type: AuthResponseDto })
   async social(@Body() input: SocialSignInDto) {
     const response = await this.signIn.social(input.provider, input.credential);
@@ -53,19 +75,38 @@ export class AuthController {
   }
   @Post('sign-in/password')
   @HttpCode(200)
+  @ApiOperation({
+    summary: 'Sign in with username and password',
+    description:
+      'Usernames are case-insensitive. An unknown user and an incorrect password return the same error.',
+  })
   @ApiOkResponse({ type: AuthResponseDto })
   password(@Body() input: PasswordSignInDto) {
     return this.signIn.local(input.username, input.password);
   }
   @Post('sign-up')
   @HttpCode(200)
+  @ApiOperation({
+    summary: 'Register a local account',
+    description:
+      'Creates an account and returns its first session. Unknown fields are rejected. Passwords are never returned.',
+  })
   @ApiOkResponse({ type: AuthResponseDto })
-  @ApiResponse({ status: 409, type: ErrorDto })
+  @ApiResponse({
+    status: 409,
+    description: 'Account could not be created; try another username.',
+    type: ErrorDto,
+  })
   signUp(@Body() input: SignUpDto) {
     return this.register.execute(input);
   }
   @Post('sign-out')
   @HttpCode(200)
+  @ApiOperation({
+    summary: 'Sign out the current session',
+    description:
+      'Requires an active Deep Drill bearer token. Revokes only that session; using the token again returns HTTP 401. No request body is required.',
+  })
   @UseGuards(ActiveSessionGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ type: SuccessDto })
