@@ -11,3 +11,6 @@ coverage/
 .DS_Store
 *.pem
 *.key
+
+__pycache__/
+*.pyc

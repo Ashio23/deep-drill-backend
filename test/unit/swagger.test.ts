@@ -16,7 +16,7 @@ import { configureApp } from '../../src/bootstrap';
 import { AuthController } from '../../src/interfaces/http/auth.controller';
 import { HealthController } from '../../src/interfaces/http/health.controller';
 
-async function createApp(enabled: boolean) {
+async function createApp(enabled: boolean, maintenance = false, proxy = false) {
   const module = await Test.createTestingModule({
     controllers: [AuthController, HealthController],
     providers: [
@@ -25,6 +25,8 @@ async function createApp(enabled: boolean) {
         useValue: new ConfigService({
           CORS_ORIGINS: [],
           SWAGGER_ENABLED: enabled,
+          MAINTENANCE_MODE: maintenance,
+          TRUST_PROXY_LOOPBACK: proxy,
         }),
       },
       ...[
@@ -139,4 +141,37 @@ test('disabling Swagger hides documentation while preserving API routes', async 
     await api.get(path).expect(404);
   }
   await api.get('/api/v1/health').expect(200, { status: 'ok', database: 'up' });
+});
+
+test('maintenance rejects all authentication mutations but keeps health available', async (t) => {
+  const app = await createApp(false, true);
+  t.after(() => app.close());
+  for (const endpoint of [
+    'sign-in',
+    'sign-in/password',
+    'sign-up',
+    'sign-out',
+  ]) {
+    const response = await request(app.getHttpServer())
+      .post('/api/v1/auth/' + endpoint)
+      .send({})
+      .expect(503);
+    assert.equal(response.body.code, 'MAINTENANCE');
+    assert.equal(response.headers['retry-after'], '60');
+  }
+  await request(app.getHttpServer()).get('/api/v1/health').expect(200);
+});
+
+test('proxy trust accepts only loopback and remains disabled by default', async (t) => {
+  const local = await createApp(false, false, true);
+  const direct = await createApp(false);
+  t.after(async () => {
+    await local.close();
+    await direct.close();
+  });
+  const trust = local.getHttpAdapter().getInstance().get('trust proxy fn');
+  assert.equal(trust('127.0.0.1'), true);
+  assert.equal(trust('::1'), true);
+  assert.equal(trust('198.51.100.42'), false);
+  assert.equal(direct.getHttpAdapter().getInstance().get('trust proxy'), false);
 });

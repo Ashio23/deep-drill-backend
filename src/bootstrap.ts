@@ -1,13 +1,34 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
-import { json } from 'express';
+import { json, Request, Response, NextFunction } from 'express';
 import { AuthError } from './domain/auth';
 import { ApiErrorFilter } from './interfaces/http/error.filter';
 import { configureSwagger } from './interfaces/http/swagger';
 export function configureApp(app: INestApplication): void {
   const config = app.get(ConfigService);
+  // Only the local Nginx hop is trusted; its template replaces incoming X-Forwarded-For.
+  if (config.get<boolean>('TRUST_PROXY_LOOPBACK')) {
+    app.getHttpAdapter().getInstance().set('trust proxy', 'loopback');
+  }
   app.use(helmet());
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (
+      config.get<boolean>('MAINTENANCE_MODE') &&
+      req.path.startsWith('/api/v1/auth/')
+    ) {
+      res.setHeader('Retry-After', '60');
+      res
+        .status(503)
+        .json({
+          statusCode: 503,
+          code: 'MAINTENANCE',
+          message: 'Authentication temporarily unavailable during maintenance.',
+        });
+      return;
+    }
+    next();
+  });
   app.use(json({ limit: '24kb' }));
   app.enableCors({
     origin: config.getOrThrow<string[]>('CORS_ORIGINS'),

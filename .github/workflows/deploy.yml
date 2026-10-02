@@ -1,0 +1,73 @@
+name: Verify and deploy Deep Drill
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deepdrill-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24.21.0'
+          cache: npm
+      - name: Install isolated-test MongoDB binary
+        run: |
+          curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
+          echo 'deb [arch=amd64 signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/8.0 multiverse' | sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list
+          sudo apt-get update -qq
+          sudo apt-get install -y mongodb-org-server=8.0.32
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run test:e2e
+      - run: python3 -m unittest discover -s deploy/tests -v
+      - run: npm run build
+      - name: Package verified Linux runtime
+        run: |
+          npm prune --omit=dev
+          tar --dereference --hard-dereference -czf deepdrill.tar.gz dist node_modules package.json package-lock.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: deepdrill-${{ github.sha }}
+          path: deepdrill.tar.gz
+          retention-days: 3
+          if-no-files-found: error
+  deploy:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: deepdrill-${{ github.sha }}
+      - name: Configure restricted SSH identity
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: Stream verified artifact and activate with health rollback
+        env:
+          RELEASE: ${{ github.sha }}
+        run: |
+          DIGEST=$(sha256sum deepdrill.tar.gz | cut -d ' ' -f 1)
+          ssh -T -p 22022 -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 deepdrill@129.121.46.191 "deploy $RELEASE $DIGEST" < deepdrill.tar.gz
+          curl --fail --silent --show-error --retry 3 https://deepdrill.cl/api/v1/health
+      - name: Remove runner credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts

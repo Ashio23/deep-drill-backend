@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 function integer(
   env: Record<string, unknown>,
   key: string,
@@ -49,6 +50,8 @@ export function validateEnvironment(env: Record<string, unknown>) {
     if (!/^v\d+\.0$/.test(required('FACEBOOK_GRAPH_API_VERSION')))
       throw new Error('Invalid FACEBOOK_GRAPH_API_VERSION');
   }
+  const host = String(env.HOST ?? '0.0.0.0');
+  if (!isIP(host)) throw new Error('HOST must be an IP address');
   const cors = String(env.CORS_ORIGINS ?? '')
     .split(',')
     .map((s) => s.trim())
@@ -57,6 +60,9 @@ export function validateEnvironment(env: Record<string, unknown>) {
     throw new Error('CORS_ORIGINS must contain explicit origins');
   return {
     ...env,
+    HOST: host,
+    TRUST_PROXY_LOOPBACK: flag(env, 'TRUST_PROXY_LOOPBACK'),
+    MAINTENANCE_MODE: flag(env, 'MAINTENANCE_MODE'),
     JWT_SECRET: secret,
     MONGODB_URI: mongo,
     JWT_LIFETIME_SECONDS: seconds,

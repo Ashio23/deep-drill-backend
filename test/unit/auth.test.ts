@@ -316,3 +316,31 @@ test('health checks Mongo ping and sanitizes database failures', async () => {
   mongo.readyState = 0;
   await assert.rejects(controller.health(), ServiceUnavailableException);
 });
+
+test('production bind, proxy and maintenance configuration is explicit', () => {
+  const base = {
+    JWT_SECRET: 'test-only-'.repeat(8),
+    MONGODB_URI: 'mongodb://localhost/test',
+  };
+  const defaults = validateEnvironment(base);
+  assert.equal(defaults.TRUST_PROXY_LOOPBACK, false);
+  assert.equal(defaults.MAINTENANCE_MODE, false);
+  assert.equal(defaults.HOST, '0.0.0.0');
+  const local = validateEnvironment({
+    ...base,
+    HOST: '127.0.0.1',
+    TRUST_PROXY_LOOPBACK: 'true',
+    MAINTENANCE_MODE: 'true',
+  });
+  assert.equal(local.HOST, '127.0.0.1');
+  assert.equal(local.TRUST_PROXY_LOOPBACK, true);
+  assert.equal(local.MAINTENANCE_MODE, true);
+  assert.throws(
+    () => validateEnvironment({ ...base, HOST: 'not-a-host' }),
+    /HOST/,
+  );
+  assert.throws(
+    () => validateEnvironment({ ...base, TRUST_PROXY_LOOPBACK: 'all' }),
+    /TRUST_PROXY/,
+  );
+});

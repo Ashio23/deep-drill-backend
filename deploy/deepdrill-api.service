@@ -1,0 +1,31 @@
+[Unit]
+Description=Deep Drill API supervised by OpenBao Agent
+After=network-online.target mongod.service openbao.service
+Wants=network-online.target mongod.service openbao.service
+StartLimitIntervalSec=0
+[Service]
+Type=simple
+User=deepdrill
+Group=deepdrill
+WorkingDirectory=/home/deepdrill/apps/current
+LoadCredential=role-id:/etc/deepdrill/role-id
+LoadCredential=secret-id:/etc/deepdrill/secret-id
+ExecStart=/usr/bin/bao agent -config=/etc/deepdrill/agent.hcl
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=35
+KillMode=mixed
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+UMask=0077
+MemoryHigh=384M
+MemoryMax=512M
+CPUWeight=50
+[Install]
+WantedBy=multi-user.target

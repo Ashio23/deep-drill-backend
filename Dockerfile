@@ -11,6 +11,7 @@ WORKDIR /app
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/package.json ./
+COPY --chown=node:node scripts/legacy-proxy.cjs ./scripts/legacy-proxy.cjs
 USER node
 EXPOSE 3000
 CMD ["node", "dist/main.js"]

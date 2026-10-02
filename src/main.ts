@@ -16,7 +16,7 @@ async function bootstrap() {
   Logger.log('Mongo connected', 'Bootstrap');
   await app.listen(
     app.get(ConfigService).getOrThrow<number>('PORT'),
-    '0.0.0.0',
+    app.get(ConfigService).getOrThrow<string>('HOST'),
   );
 }
 void bootstrap().catch(() => {
