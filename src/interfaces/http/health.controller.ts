@@ -1,6 +1,7 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   ApiOkResponse,
   ApiOperation,
@@ -14,6 +15,7 @@ import { HealthResponseDto } from './health.dto';
 export class HealthController {
   constructor(@InjectConnection() private readonly mongo: Connection) {}
   @Get()
+  @SkipThrottle()
   @ApiOperation({
     summary: 'Check application and database availability',
     description: 'Pings MongoDB. No authentication is required.',
@@ -22,11 +24,6 @@ export class HealthController {
   @ApiResponse({
     status: 503,
     description: 'MongoDB is disconnected or its ping failed.',
-    type: ErrorDto,
-  })
-  @ApiResponse({
-    status: 429,
-    description: 'Per-IP request limit exceeded.',
     type: ErrorDto,
   })
   async health(): Promise<HealthResponseDto> {

@@ -6,6 +6,8 @@ import { getConnectionToken } from '@nestjs/mongoose';
 import { OpenAPIObject } from '@nestjs/swagger';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import {
   RegisterUseCase,
   SignInUseCase,
@@ -80,7 +82,7 @@ test('OpenAPI documents all versioned routes, request schemas and session securi
     const operation = path.get ?? path.post;
     assert.ok(operation?.summary);
     assert.ok(operation.responses['200']);
-    assert.ok(operation.responses['429']);
+    if (path.post) assert.ok(operation.responses['429']);
   }
   const signup = document.paths['/api/v1/auth/sign-up']?.post;
   const body = signup?.requestBody;
@@ -174,4 +176,23 @@ test('proxy trust accepts only loopback and remains disabled by default', async 
   assert.equal(trust('::1'), true);
   assert.equal(trust('198.51.100.42'), false);
   assert.equal(direct.getHttpAdapter().getInstance().get('trust proxy'), false);
+});
+
+test('health probes remain available beyond the authentication rate limit', async (t) => {
+  const module = await Test.createTestingModule({
+    imports: [ThrottlerModule.forRoot([{ ttl: 60000, limit: 1 }])],
+    controllers: [HealthController],
+    providers: [
+      { provide: APP_GUARD, useClass: ThrottlerGuard },
+      {
+        provide: getConnectionToken(),
+        useValue: { readyState: 1, db: { command: async () => ({ ok: 1 }) } },
+      },
+    ],
+  }).compile();
+  const app = module.createNestApplication({ logger: false });
+  await app.init();
+  t.after(() => app.close());
+  for (let i = 0; i < 3; i++)
+    await request(app.getHttpServer()).get('/health').expect(200);
 });
