@@ -1,5 +1,7 @@
 # Deep Drill Backend
 
+> Producción desde el 02-10-2026: **https://deepdrill.cl/api/v1**, MongoDB en la VPS y secretos en OpenBao. Los pushes a `main` despliegan con GitHub Actions. Consulta [operación y recuperación](deploy/OPERATIONS.md). Render sólo conserva un proxy temporal para clientes antiguos; las instrucciones Render/Atlas siguientes son históricas.
+
 Standalone modular NestJS authentication service. Client: `../Android`; backend: this directory. This backend is versioned independently at [Ashio23/deep-drill-backend](https://github.com/Ashio23/deep-drill-backend). Node 24 LTS, TypeScript strict, NestJS 12, Mongoose 9 / MongoDB 8. Exact dependencies are locked in `package-lock.json`.
 
 ## Run locally

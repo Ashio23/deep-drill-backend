@@ -14,4 +14,4 @@ Files in this directory are installed by an administrator. The workflow delibera
 
 `MAINTENANCE_MODE=true` rejects authentication routes with HTTP 503/Retry-After while health remains available. It is used to stop writes during final migration. `scripts/legacy-proxy.cjs` is an optional temporary Render command for installed clients using the former hostname; it forwards only the known API paths to deepdrill.cl and does not connect to Mongo or issue tokens. It needs no old database/provider/JWT secrets. New Android builds should use `https://deepdrill.cl/api/v1` directly.
 
-Operational results, restore evidence, backup schedule and recovery commands are recorded in `OPERATIONS.md` after commissioning. Do not rerun an initial bootstrap against an existing database or regenerate JWT/provider credentials during a deployment.
+Operational results, restore evidence, backup schedule and recovery commands are recorded in [OPERATIONS.md](OPERATIONS.md). Do not rerun an initial bootstrap against an existing database or regenerate JWT/provider credentials during a deployment.
