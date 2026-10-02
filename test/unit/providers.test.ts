@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { createHmac } from 'node:crypto';
+import { AuthError } from '../../src/domain/auth';
 import assert from 'node:assert/strict';
 import { ConfigService } from '@nestjs/config';
 import { FacebookIdentityProvider } from '../../src/infrastructure/authentication/facebook.provider';
@@ -19,8 +21,12 @@ const valid = {
 };
 test('Facebook validates debug token before reading identity; missing email is valid', async (t) => {
   const urls: URL[] = [];
-  t.mock.method(globalThis, 'fetch', async (input: URL) => {
+  const headers: Headers[] = [];
+  t.mock.method(globalThis, 'fetch', async (input: URL, init: RequestInit) => {
     urls.push(input);
+    headers.push(new Headers(init.headers));
+    assert.equal(init.redirect, 'error');
+    assert.ok(init.signal);
     return Response.json(
       urls.length === 1 ? { data: valid } : { id: '456', name: 'Pilot' },
     );
@@ -31,10 +37,27 @@ test('Facebook validates debug token before reading identity; missing email is v
   assert.equal(identity.providerUserId, '456');
   assert.equal(identity.email, undefined);
   assert.equal(urls[1]!.searchParams.get('fields'), 'id,name,picture');
-  assert.ok(urls[1]!.searchParams.get('appsecret_proof'));
+  assert.equal(urls[0]!.pathname, '/v26.0/debug_token');
+  assert.equal(urls[0]!.searchParams.get('input_token'), 'test-credential');
+  assert.equal(headers[0]!.get('Authorization'), 'Bearer 123|test-only');
+  assert.equal(urls[1]!.pathname, '/v26.0/me');
+  assert.equal(headers[1]!.get('Authorization'), 'Bearer test-credential');
+  assert.equal(
+    urls[1]!.searchParams.get('appsecret_proof'),
+    createHmac('sha256', 'test-only').update('test-credential').digest('hex'),
+  );
+  assert.ok(urls.every((url) => !url.toString().includes('test-only')));
 });
 for (const [name, patch] of Object.entries({
   invalid: { is_valid: false },
+  stringValidity: { is_valid: 'true' },
+  stringExpiration: { expires_at: 'not-a-date' },
+  missingExpiration: { expires_at: undefined },
+  fractionalExpiration: { expires_at: 123.5 },
+  malformedDataExpiration: { data_access_expires_at: 'never' },
+  negativeDataExpiration: { data_access_expires_at: -1 },
+  malformedScopes: { scopes: 'public_profile' },
+  malformedUser: { user_id: 456 },
   wrongApp: { app_id: 'other' },
   expired: { expires_at: 1 },
   dataExpired: { data_access_expires_at: 1 },
@@ -52,6 +75,7 @@ for (const [name, patch] of Object.entries({
       new FacebookIdentityProvider(config).validateCredential(
         'test-credential',
       ),
+      (error: unknown) => error instanceof AuthError && error.status === 401,
     );
     assert.equal(count, 1);
   });
@@ -190,5 +214,64 @@ test('Google adapter never exposes verification errors containing credentials', 
       assert.ok(!error.message.includes('audience'));
       return true;
     },
+  );
+});
+
+for (const dataAccess of [undefined, 0, Math.floor(Date.now() / 1000) + 3600])
+  test(`Facebook accepts optional email and data expiration ${dataAccess === undefined ? 'absent' : dataAccess === 0 ? 'zero' : 'future'}`, async (t) => {
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async (url: URL) => {
+      calls++;
+      if (calls === 1)
+        return Response.json({
+          data: {
+            ...valid,
+            scopes: ['public_profile', 'email'],
+            data_access_expires_at: dataAccess,
+          },
+        });
+      assert.equal(url.searchParams.get('fields'), 'id,name,picture,email');
+      return Response.json({ id: '456', name: 'Pilot', email: null });
+    });
+    const identity = await new FacebookIdentityProvider(
+      config,
+    ).validateCredential('test');
+    assert.equal(identity.email, undefined);
+    assert.equal(identity.provider, 'facebook');
+  });
+for (const status of [429, 500, 503])
+  test(`Facebook Graph ${status} is recoverable without exposing provider content`, async (t) => {
+    t.mock.method(
+      globalThis,
+      'fetch',
+      async () => new Response('private-provider-marker', { status }),
+    );
+    await assert.rejects(
+      new FacebookIdentityProvider(config).validateCredential('private-token'),
+      {
+        code: 'SERVER_UNAVAILABLE',
+        status: 503,
+        message: 'SERVER_UNAVAILABLE',
+      },
+    );
+  });
+test('Facebook transport exception is sanitized and recoverable', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => {
+    throw new Error('private-token-in-url');
+  });
+  await assert.rejects(
+    new FacebookIdentityProvider(config).validateCredential('private-token'),
+    { code: 'SERVER_UNAVAILABLE', status: 503, message: 'SERVER_UNAVAILABLE' },
+  );
+});
+test('Facebook Graph credential rejection remains unauthorized', async (t) => {
+  t.mock.method(
+    globalThis,
+    'fetch',
+    async () => new Response('private-provider-marker', { status: 400 }),
+  );
+  await assert.rejects(
+    new FacebookIdentityProvider(config).validateCredential('private-token'),
+    { code: 'AUTH_INVALID_CREDENTIAL', status: 401 },
   );
 });

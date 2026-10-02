@@ -20,6 +20,7 @@ const messages: Record<string, string> = {
   AUTH_REGISTRATION_FAILED: 'Could not create account. Try another username.',
   REQUEST_INVALID: 'Check the supplied fields.',
   RATE_LIMITED: 'Too many requests. Try again later.',
+  SERVER_UNAVAILABLE: 'Authentication service temporarily unavailable.',
   INTERNAL_ERROR: 'Service temporarily unavailable.',
 };
 @Catch()

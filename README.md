@@ -192,3 +192,13 @@ The value must exactly match Android `GOOGLE_WEB_CLIENT_ID` / Credential Manager
 After a real Android login, copy only the game User ID from debug diagnostics and run `node scripts/verify-google-user.cjs <USER_ID>`. This read-only command checks `deep-drill.users`, Google identity presence and exactly one matching user; it prints only game/session UUIDs, timestamps and revocation state. Run before logout, after logout, and after another login: same user UUID, revoked old session, distinct new session. Do not feed tokens to scripts or store them as fixtures. Android session persistence, logout and duplicate checks after real Google authentication passed in the emulator on 2026-09-20.
 
 The earlier error 28444 was resolved: an Android OAuth Client ID had been supplied as the Web audience. Replacing it with the actual Web Client ID enabled the complete real flow.
+
+## Facebook setup and verification
+
+Use the Meta app matching Android's `FACEBOOK_APP_ID`. Backend/Render requires `AUTH_FACEBOOK_ENABLED=true`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`, and `FACEBOOK_GRAPH_API_VERSION=v26.0`. Preserve Mongo, JWT and Google environment values. App Secret and app access tokens belong only on the server; Android receives the public app ID and SDK client token. The [official Graph changelog](https://developers.facebook.com/docs/graph-api/changelog/) identifies v26.0 as current on 2026-10-01.
+
+The Facebook adapter verifies debug_token (app identity, USER type, subject, public_profile, validity and numeric token/data-access expiration), then /me with appsecret_proof. Email is optional. Google/Facebook identities with the same email remain separate. Graph outages/rate limits return a safe 503; invalid/expired/wrong-app credentials return 401. Success logs contain only the game user UUID.
+
+Unit tests mock Meta; integration tests use the real Facebook adapter with mocked Graph responses and an isolated Mongo process. These checks do not prove a real Meta account flow. Actual Meta app/Render environment configuration and Facebook E2E are pending; see the client [implementation report](../Android/FACEBOOK_AUTH_IMPLEMENTATION.md) and [manual checklist](../Android/FACEBOOK_E2E_CHECKLIST.md) in the sibling checkout.
+
+After real Facebook login, `node scripts/verify-facebook-user.cjs <GAME_USER_UUID>` performs a read-only check using the existing local `.env`. It confirms identity presence/uniqueness and session metadata without printing provider IDs, emails, tokens or secrets. Live Mode, real privacy/data-deletion URLs, permission access/review and Play App Signing key hash remain production follow-ups.

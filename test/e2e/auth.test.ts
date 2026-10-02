@@ -9,6 +9,7 @@ import { createServer } from 'node:net';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 import { Test } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { INestApplication } from '@nestjs/common';
 import { getConnectionToken } from '@nestjs/mongoose';
 import { Connection } from 'mongoose';
@@ -105,13 +106,16 @@ before(
         },
       })
       .overrideProvider(FacebookIdentityProvider)
-      .useValue({
-        validateCredential: async (c: string) => ({
-          provider: Provider.Facebook,
-          providerUserId: c,
-          displayName: 'Facebook Pilot',
-        }),
-      })
+      .useValue(
+        new FacebookIdentityProvider(
+          new ConfigService({
+            AUTH_FACEBOOK_ENABLED: true,
+            FACEBOOK_APP_ID: '123',
+            FACEBOOK_APP_SECRET: 'e2e-test-only',
+            FACEBOOK_GRAPH_API_VERSION: 'v26.0',
+          }),
+        ),
+      )
       .compile();
     app = module.createNestApplication({ logger: false, bodyParser: false });
     configureApp(app);
@@ -195,12 +199,50 @@ test('concurrent first logins create one user, bounded sessions and no credentia
     ['users'],
   );
 });
-test('Facebook without email signs in and revoke is enforced', async () => {
+test('Facebook real adapter without email creates user and session, reuses identity, and revokes', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (url: URL) =>
+    Response.json(
+      url.pathname.endsWith('/debug_token')
+        ? {
+            data: {
+              is_valid: true,
+              app_id: '123',
+              type: 'USER',
+              user_id: 'facebook-sub',
+              scopes: ['public_profile'],
+              expires_at: Math.floor(Date.now() / 1000) + 3600,
+            },
+          }
+        : { id: 'facebook-sub', name: 'Facebook Pilot' },
+    ),
+  );
   const login = await api()
     .post('/api/v1/auth/sign-in')
     .send({ provider: 'facebook', credential: 'facebook-sub' })
     .expect(200);
   assert.equal(login.body.user.email, null);
+  assert.equal(login.body.user.provider, 'facebook');
+  const second = await api()
+    .post('/api/v1/auth/sign-in')
+    .send({ provider: 'facebook', credential: 'facebook-sub' })
+    .expect(200);
+  assert.equal(second.body.user.id, login.body.user.id);
+  assert.notEqual(second.body.accessToken, login.body.accessToken);
+  const record = await connection
+    .collection('users')
+    .findOne({ _id: login.body.user.id });
+  assert.equal(record?.sessions.length, 2);
+  assert.equal(
+    await connection
+      .collection('users')
+      .countDocuments({
+        providers: {
+          $elemMatch: { type: 'facebook', providerUserId: 'facebook-sub' },
+        },
+      }),
+    1,
+  );
+  assert.equal(record?.credential, undefined);
   const header = `Bearer ${login.body.accessToken}`;
   await api()
     .post('/api/v1/auth/sign-out')
@@ -336,3 +378,37 @@ test('Google email/profile changes keep sub identity and add a distinct session'
   assert.notEqual(record!.sessions[0].id, record!.sessions[1].id);
   assert.ok(record!.lastLoginAt instanceof Date);
 });
+
+for (const [name, fields] of Object.entries({
+  wrongApp: { app_id: 'other-app' },
+  expired: { expires_at: 1 },
+  invalid: { is_valid: false },
+}))
+  test(`Facebook ${name} is HTTP 401 and creates no Mongo user`, async (t) => {
+    let calls = 0;
+    t.mock.method(globalThis, 'fetch', async () => {
+      calls++;
+      return Response.json({
+        data: {
+          is_valid: true,
+          app_id: '123',
+          type: 'USER',
+          user_id: `rejected-${name}`,
+          scopes: ['public_profile'],
+          expires_at: Math.floor(Date.now() / 1000) + 3600,
+          ...fields,
+        },
+      });
+    });
+    await api()
+      .post('/api/v1/auth/sign-in')
+      .send({ provider: 'facebook', credential: 'test-only' })
+      .expect(401);
+    assert.equal(calls, 1);
+    assert.equal(
+      await connection
+        .collection('users')
+        .countDocuments({ 'providers.providerUserId': `rejected-${name}` }),
+      0,
+    );
+  });

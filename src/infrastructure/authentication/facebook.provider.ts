@@ -34,13 +34,25 @@ export class FacebookIdentityProvider implements IdentityProvider {
     Object.entries(parameters).forEach(([key, value]) =>
       url.searchParams.set(key, value),
     );
-    const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${bearer}` },
-      signal: AbortSignal.timeout(8000),
-      redirect: 'error',
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        headers: { Authorization: `Bearer ${bearer}` },
+        signal: AbortSignal.timeout(8000),
+        redirect: 'error',
+      });
+    } catch {
+      // Provider/network errors can contain credential-bearing URLs: never forward them.
+      throw new AuthError('SERVER_UNAVAILABLE', 503);
+    }
+    if (response.status === 429 || response.status >= 500)
+      throw new AuthError('SERVER_UNAVAILABLE', 503);
     if (!response.ok) throw new AuthError('AUTH_INVALID_CREDENTIAL');
-    return (await response.json()) as T;
+    try {
+      return (await response.json()) as T;
+    } catch {
+      throw new AuthError('SERVER_UNAVAILABLE', 503);
+    }
   }
   async validateCredential(credential: string): Promise<ExternalIdentity> {
     if (!this.config.get<boolean>('AUTH_FACEBOOK_ENABLED'))
@@ -54,20 +66,25 @@ export class FacebookIdentityProvider implements IdentityProvider {
         `${appId}|${secret}`,
       );
       if (
-        !data?.is_valid ||
+        data?.is_valid !== true ||
         data.app_id !== appId ||
         data.type !== 'USER' ||
-        !data.user_id ||
-        !data.scopes?.includes('public_profile')
+        typeof data.user_id !== 'string' ||
+        !data.user_id.trim() ||
+        !Array.isArray(data.scopes) ||
+        !data.scopes.includes('public_profile')
       )
         throw new AuthError('AUTH_INVALID_CREDENTIAL');
       const now = Math.floor(Date.now() / 1000);
       if (
-        !data.expires_at ||
+        typeof data.expires_at !== 'number' ||
+        !Number.isSafeInteger(data.expires_at) ||
         data.expires_at <= now ||
         (data.data_access_expires_at !== undefined &&
-          data.data_access_expires_at !== 0 &&
-          data.data_access_expires_at <= now)
+          (typeof data.data_access_expires_at !== 'number' ||
+            !Number.isSafeInteger(data.data_access_expires_at) ||
+            (data.data_access_expires_at !== 0 &&
+              data.data_access_expires_at <= now)))
       )
         throw new AuthError('AUTH_EXPIRED_CREDENTIAL');
       const fields =
@@ -87,9 +104,13 @@ export class FacebookIdentityProvider implements IdentityProvider {
       return {
         provider: Provider.Facebook,
         providerUserId: data.user_id,
-        displayName: profile.name,
-        email: profile.email,
-        avatarUrl: profile.picture?.data?.url,
+        displayName:
+          typeof profile.name === 'string' ? profile.name : undefined,
+        email: typeof profile.email === 'string' ? profile.email : undefined,
+        avatarUrl:
+          typeof profile.picture?.data?.url === 'string'
+            ? profile.picture.data.url
+            : undefined,
       };
     } catch (error) {
       if (error instanceof AuthError) throw error;

@@ -71,6 +71,10 @@ export class AuthController {
       this.logger.log(
         `Google authentication successful userId=${response.user.id}`,
       );
+    if (input.provider === 'facebook')
+      this.logger.log(
+        `Facebook authentication successful userId=${response.user.id}`,
+      );
     return response;
   }
   @Post('sign-in/password')
