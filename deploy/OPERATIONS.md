@@ -2,16 +2,29 @@
 
 ## Servicios y dominio
 
-- API: **https://deepdrill.cl/api/v1**; salud: `GET /api/v1/health`.
+- API: **https://api.deepdrill.cl/api/v1**; Swagger: **https://api.deepdrill.cl/api/docs/**; salud: `GET /api/v1/health`.
 - VPS HostGator: `129.121.46.191`, Ubuntu 22.04.5, SSH `22022`, usuario de aplicación/Hestia `deepdrill`.
 - NIC: delegación guardada y verificada en `.cl`: `ns1.miraeste.cl`, `ns2.miraeste.cl`. La zona Hestia apunta el dominio y `www` a la VPS; TTL 300. Ambos NS residen en la misma VPS.
-- Hestia administra Let's Encrypt para `deepdrill.cl` y `www.deepdrill.cl`, redirección HTTPS y HSTS. Plantillas propias en `/usr/local/hestia/data/templates/web/nginx/php-fpm/deepdrill-api.{tpl,stpl}`. Su excepción `.well-known` permite los challenges generados por Hestia y la renovación.
+- Hestia administra Let's Encrypt para `api.deepdrill.cl`, `deepdrill.cl` y `www.deepdrill.cl`, redirección HTTPS y HSTS. Plantillas propias en `/usr/local/hestia/data/templates/web/nginx/php-fpm/deepdrill-api.{tpl,stpl}`. Su excepción `.well-known` permite los challenges generados por Hestia y la renovación.
 - Node `24.21.0`, API `127.0.0.1:3200`, servicio `deepdrill-api`.
 - MongoDB `8.0.32`, `127.0.0.1:27017`, servicio `mongod`, base `deep-drill`. Aplicación `deepdrill_app` sólo tiene `readWrite` sobre esa base.
 - OpenBao `2.7.1`, TLS `127.0.0.1:8200`, servicio `openbao`, Raft `/opt/openbao/data`.
 - Miraeste conserva sus servicios `miraeste-api`/`miraeste-web`, PostgreSQL y configuración propia. Su health HTTPS siguió respondiendo durante las comprobaciones.
 
 MongoDB, OpenBao y Node no escuchan públicamente. No se requiere abrir sus puertos. El certificado interno de OpenBao está en `/etc/deepdrill/openbao-ca.crt`; no se desactiva la validación TLS. Los límites de memoria son 512 MiB para API/agente, 1 GiB para Mongo y 384 MiB para OpenBao. Tras la migración había unos 2.5 GiB disponibles y no se usaba swap. Toda la instalación comparte un único punto de fallo con Miraeste.
+
+## Acceso a Hestia y alcance de sus cuentas
+
+Entrar con **`admin`** y usar **Usuarios → iniciar sesión como el usuario** para administrar ambos proyectos. `miraeste` y `deepdrill` conservan roles normales; cada uno ve únicamente sus propios recursos. No se debe elevar la cuenta que ejecuta Node a administradora para obtener una vista general. `root` es la cuenta del sistema/VNC, distinta de `admin` en Hestia.
+
+- Usuario `miraeste`: `miraeste.cl`, su correo y su PostgreSQL registrados en Hestia.
+- Usuario `deepdrill`: zona DNS `deepdrill.cl`, sitios `deepdrill.cl` y `api.deepdrill.cl`. La contraseña de esta cuenta está en el archivo privado `hestia-account.json` del paquete de recuperación.
+
+MongoDB `deep-drill` existe en la VPS, pero **no aparece en la pestaña DB de Hestia**: la versión instalada sólo implementa los tipos `mysql` y `pgsql`. Mongo se administra con sus herramientas y roles propios. Tampoco los jugadores de Deep Drill ni los usuarios de la aplicación Miraeste son cuentas del panel: Hestia administra alojamiento, dominios y correo. [Roles de Hestia](https://hestiacp.com/docs/user-guide/users), [bases de datos admitidas](https://hestiacp.com/docs/user-guide/databases).
+
+`api.deepdrill.cl` es el host canónico del backend. `deepdrill.cl` conserva temporalmente las rutas anteriores para los clientes ya compilados; se puede asignar el dominio raíz a un sitio web al retirar esa compatibilidad. El registro `api` se administra en la zona DNS de Hestia; no exige cambiar otra vez la delegación en NIC.
+
+Swagger está habilitado mediante `SWAGGER_ENABLED=true` en OpenBao. La raíz del host API abre `/api/docs/`; el esquema está en `/api/docs-json`. Las rutas versionadas mantienen `/api/v1`. **Try it out** usa producción y sus operaciones de registro/login/logout tienen efectos reales.
 
 ## Despliegues
 
@@ -50,7 +63,7 @@ bao kv patch secret/deepdrill/production MAINTENANCE_MODE=true
 # Al terminar el mantenimiento:
 bao kv patch secret/deepdrill/production MAINTENANCE_MODE=false
 systemctl status deepdrill-api mongod openbao
-curl --fail https://deepdrill.cl/api/v1/health
+curl --fail https://api.deepdrill.cl/api/v1/health
 bao token revoke -self
 rm -f ~/.vault-token
 ```
@@ -67,7 +80,7 @@ Después se activó la VPS y se probaron registro, login por contraseña, rechaz
 
 Render ejecuta temporalmente `node scripts/legacy-proxy.cjs`, con auto-deploy **Off** y únicamente `PORT` como variable propia. La URL antigua sigue remitiendo las rutas conocidas a `deepdrill.cl`; se comprobó login por Render y revocación del mismo token por la URL nueva. No tiene acceso a Mongo ni emite tokens. Sus límites/arranque en frío siguen afectando únicamente a clientes antiguos. Se puede retirar cuando los clientes instalados hayan actualizado su URL.
 
-Android usa `https://deepdrill.cl/api/v1` por defecto; también se actualizó el override local. Build debug y tests de core pasaron. Los resultados históricos de pruebas de Render/Atlas se conservan como tales.
+Android usa `https://api.deepdrill.cl/api/v1` por defecto; también se actualizó el override local. Build debug y tests de core pasaron. Los resultados históricos de pruebas de Render/Atlas se conservan como tales.
 
 Atlas se conserva como copia de retorno, sin backend activo escribiendo allí. No se borró el clúster ni su cuenta. Una vuelta a Atlas después de aceptar escrituras nuevas en la VPS requiere parar escrituras y copiar el estado actualizado: cambiar únicamente la URI perdería datos posteriores a la migración.
 

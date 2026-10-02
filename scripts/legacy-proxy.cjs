@@ -11,7 +11,7 @@ const server = http.createServer(async (req, res) => {
     for await (const chunk of req) { bytes+=chunk.length;if(bytes>24576){res.writeHead(413).end();return;}chunks.push(chunk); }
     const headers = {accept:'application/json','content-type':'application/json'};
     if (req.headers.authorization) headers.authorization=req.headers.authorization;
-    const upstream = await fetch('https://deepdrill.cl'+path, {method:req.method, headers, body:req.method==='POST'?Buffer.concat(chunks):undefined, redirect:'error', signal:AbortSignal.timeout(15000)});
+    const upstream = await fetch('https://api.deepdrill.cl'+path, {method:req.method, headers, body:req.method==='POST'?Buffer.concat(chunks):undefined, redirect:'error', signal:AbortSignal.timeout(15000)});
     res.setHeader('content-type','application/json');res.setHeader('cache-control','no-store');res.setHeader('x-content-type-options','nosniff');
     if(upstream.headers.has('retry-after'))res.setHeader('retry-after',upstream.headers.get('retry-after'));
     res.writeHead(upstream.status);

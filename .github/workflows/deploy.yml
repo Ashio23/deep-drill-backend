@@ -67,7 +67,7 @@ jobs:
         run: |
           DIGEST=$(sha256sum deepdrill.tar.gz | cut -d ' ' -f 1)
           ssh -T -p 22022 -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=10 deepdrill@129.121.46.191 "deploy $RELEASE $DIGEST" < deepdrill.tar.gz
-          curl --fail --silent --show-error --retry 3 https://deepdrill.cl/api/v1/health
+          curl --fail --silent --show-error --retry 3 https://api.deepdrill.cl/api/v1/health
       - name: Remove runner credentials
         if: always()
         run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts
