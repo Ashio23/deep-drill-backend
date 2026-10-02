@@ -6,8 +6,7 @@ server {
  include %home%/%user%/conf/web/%domain%/nginx.forcessl.conf*;
  client_max_body_size 24k;
  add_header X-Content-Type-Options nosniff always;
- location ^~ /.well-known/acme-challenge/ { root %docroot%; try_files $uri =404; }
- location ~ /\. { deny all; }
+ location ~ /\.(?!well-known(?:/|$)) { deny all; }
  location = / { return 302 /api/v1/health; }
  location / {
   proxy_pass http://127.0.0.1:3200;

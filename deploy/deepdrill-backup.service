@@ -1,0 +1,19 @@
+[Unit]
+Description=Back up Deep Drill MongoDB and OpenBao
+After=mongod.service openbao.service
+[Service]
+Type=oneshot
+User=root
+UMask=0077
+LoadCredential=role-id:/etc/deepdrill/backup-role-id
+LoadCredential=secret-id:/etc/deepdrill/backup-secret-id
+ExecStart=/usr/local/bin/deepdrill-backup
+Nice=10
+IOSchedulingClass=idle
+MemoryMax=256M
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/deepdrill /run

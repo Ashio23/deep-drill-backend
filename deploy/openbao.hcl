@@ -13,3 +13,10 @@ listener "tcp" {
   tls_key_file = "/opt/openbao/tls/server.key"
   tls_min_version = "tls12"
 }
+audit "file" "file" {
+  description = "Private audit trail with HMAC-protected secret values"
+  options {
+    file_path = "/var/log/openbao/audit.json"
+    mode = "0600"
+  }
+}

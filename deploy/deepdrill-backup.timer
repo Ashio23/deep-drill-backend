@@ -1,0 +1,8 @@
+[Unit]
+Description=Daily Deep Drill database and secrets backup
+[Timer]
+OnCalendar=*-*-* 04:30:00
+RandomizedDelaySec=15m
+Persistent=true
+[Install]
+WantedBy=timers.target
