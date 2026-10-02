@@ -233,13 +233,11 @@ test('Facebook real adapter without email creates user and session, reuses ident
     .findOne({ _id: login.body.user.id });
   assert.equal(record?.sessions.length, 2);
   assert.equal(
-    await connection
-      .collection('users')
-      .countDocuments({
-        providers: {
-          $elemMatch: { type: 'facebook', providerUserId: 'facebook-sub' },
-        },
-      }),
+    await connection.collection('users').countDocuments({
+      providers: {
+        $elemMatch: { type: 'facebook', providerUserId: 'facebook-sub' },
+      },
+    }),
     1,
   );
   assert.equal(record?.credential, undefined);

@@ -18,13 +18,11 @@ export function configureApp(app: INestApplication): void {
       req.path.startsWith('/api/v1/auth/')
     ) {
       res.setHeader('Retry-After', '60');
-      res
-        .status(503)
-        .json({
-          statusCode: 503,
-          code: 'MAINTENANCE',
-          message: 'Authentication temporarily unavailable during maintenance.',
-        });
+      res.status(503).json({
+        statusCode: 503,
+        code: 'MAINTENANCE',
+        message: 'Authentication temporarily unavailable during maintenance.',
+      });
       return;
     }
     next();
