@@ -1,0 +1,54 @@
+logging {
+  level = "warn"
+}
+
+// Separate sources: journal matches use AND, not OR.
+loki.source.journal "deepdrill" {
+  matches       = "_SYSTEMD_UNIT=deepdrill-api.service"
+  max_age       = "168h"
+  labels        = { service = "deepdrill-api", environment = "production", source = "journal" }
+  forward_to    = [loki.process.api.receiver]
+}
+
+loki.source.journal "miraeste" {
+  matches       = "_SYSTEMD_UNIT=miraeste-api.service"
+  max_age       = "168h"
+  labels        = { service = "miraeste-api", environment = "production", source = "journal" }
+  forward_to    = [loki.process.api.receiver]
+}
+
+loki.process "api" {
+  forward_to = [loki.write.local.receiver]
+  stage.decolorize {}
+
+  // Defense in depth for common credential formats. Applications must still
+  // avoid logging request bodies, credentials, personal data or tokens.
+  stage.replace {
+    expression = `(?i)bearer\s+([A-Za-z0-9._~+/=-]+)`
+    replace    = "[REDACTED]"
+  }
+  stage.replace {
+    expression = `(eyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)`
+    replace    = "[REDACTED_JWT]"
+  }
+  stage.replace {
+    expression = `(?i)mongodb(?:\+srv)?://([^\s/@]+:[^\s/@]+)@`
+    replace    = "[REDACTED]"
+  }
+  stage.replace {
+    expression = `(?i)"(?:password|access_token|refresh_token|id_token|client_secret|authorization)"\s*:\s*"([^"]+)`
+    replace    = "[REDACTED]"
+  }
+  stage.json {
+    expressions = { severity = "level" }
+  }
+  stage.labels {
+    values = { level = "severity" }
+  }
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://127.0.0.1:3300/loki/api/v1/push"
+  }
+}

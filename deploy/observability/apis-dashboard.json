@@ -1,0 +1,153 @@
+{
+  "id": null,
+  "uid": "deepdrill-api-logs",
+  "title": "APIs · Deep Drill y Miraeste",
+  "description": "Logs de systemd de ambas APIs. Filtra por servicio y texto; usa Explore → Live para seguimiento en vivo. Errores/advertencias se detectan por texto y pueden contener falsos positivos. Se omiten mensajes INFO periódicos del agente OpenBao; están disponibles en Explore sin este filtro.",
+  "tags": [
+    "apis",
+    "production"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "editable": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Volumen de logs por minuto",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "api-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 16,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service) (count_over_time({service=~\"${service:regex}\"} !~ `\\[INFO\\]\\s+agent:`[1m]))",
+          "queryType": "range",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "unit": "short",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 30
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Errores y advertencias por minuto",
+      "type": "timeseries",
+      "datasource": {
+        "type": "loki",
+        "uid": "api-loki"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (service) (count_over_time({service=~\"${service:regex}\"} !~ `\\[INFO\\]\\s+agent:` |~ `(?i)(error|fatal|exception|warn)` [1m]))",
+          "queryType": "range",
+          "legendFormat": "{{service}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Logs de las APIs",
+      "type": "logs",
+      "datasource": {
+        "type": "loki",
+        "uid": "api-loki"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 24,
+        "h": 15
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{service=~\"${service:regex}\"} !~ `\\[INFO\\]\\s+agent:` |= ${search:doublequote}",
+          "queryType": "range",
+          "legendFormat": "{{service}}"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "service",
+        "label": "API",
+        "type": "query",
+        "datasource": {
+          "type": "loki",
+          "uid": "api-loki"
+        },
+        "query": "label_values(service)",
+        "refresh": 1,
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".+",
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        },
+        "options": []
+      },
+      {
+        "name": "search",
+        "label": "Buscar texto",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "options": []
+      }
+    ]
+  },
+  "links": [
+    {
+      "title": "Explorar logs y seguimiento en vivo",
+      "url": "/explore",
+      "targetBlank": false
+    }
+  ]
+}

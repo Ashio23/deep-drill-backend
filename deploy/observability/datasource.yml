@@ -1,0 +1,12 @@
+apiVersion: 1
+datasources:
+  - name: API Logs
+    uid: api-loki
+    type: loki
+    access: proxy
+    url: http://127.0.0.1:3300
+    isDefault: true
+    editable: false
+    jsonData:
+      maxLines: 1000
+      timeout: 30
